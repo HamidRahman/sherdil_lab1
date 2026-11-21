@@ -4,7 +4,7 @@ pipeline {
     environment {
         AWS_REGION = 'us-east-1'
         ACCOUNT_ID = '678878256416'
-        REPO_NAME  = 'test_repo_1'
+        REPO_NAME  = 'hamidr/test_repo_1'
         REGISTRY   = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         IMAGE_TAG  = "v${BUILD_NUMBER}"
     }
