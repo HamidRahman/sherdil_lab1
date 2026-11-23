@@ -15,9 +15,18 @@ pipeline {
         }
 
         stage('Build Image') {
-            steps {
-                sh 'docker build -t $REPO_NAME:$IMAGE_TAG .'
-            }
+          steps {
+                script {
+                  env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                }
+                sh '''
+                  docker build \
+                    --build-arg BUILD_NUMBER=$IMAGE_TAG \
+                    --build-arg GIT_SHA=$GIT_SHA \
+                    --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                    -t $ECR_REPO:$IMAGE_TAG .
+                '''
+              }
         }
 
         stage('Login to ECR') {
