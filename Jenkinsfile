@@ -1,4 +1,3 @@
-Explain the task and provide stepwise approach to complete the task.
 pipeline {
   agent any
 
