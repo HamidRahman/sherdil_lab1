@@ -1,33 +1,19 @@
 pipeline {
   agent any
+  options { timestamps() }
 
   environment {
-    AWS_REGION  = 'us-east-1'
-    ACCOUNT_ID  = '678878256416'
-    ECR_REPO    = 'hamidr/repo_1'
-    REGISTRY    = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-    IMAGE_TAG   = "${env.BUILD_NUMBER}"
-    
+    AWS_REGION = 'us-east-1'
+    ACCOUNT_ID = '678878256416'
+    ECR_REPO   = 'hamidr/repo_1'
+    REGISTRY   = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"
+    IMAGE_URI  = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/hamidr/repo_1:${env.BUILD_NUMBER}"
   }
 
   stages {
     stage('Checkout') {
       steps { checkout scm }
-    }
-
-    stage('Build image') {
-      steps {
-                script {
-                  env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                }
-                sh '''
-                  docker build \
-                    --build-arg BUILD_NUMBER=$IMAGE_TAG \
-                    --build-arg GIT_SHA=$GIT_SHA \
-                    --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                    -t $ECR_REPO:$IMAGE_TAG .
-                '''
-              }
     }
 
     stage('Login to ECR') {
@@ -39,42 +25,44 @@ pipeline {
       }
     }
 
-    stage('Push to ECR') {
+    stage('Ensure ECR repository') {
       steps {
         sh '''
-          docker tag $ECR_REPO:$IMAGE_TAG $REGISTRY/$ECR_REPO:$IMAGE_TAG
-          docker push $REGISTRY/$ECR_REPO:$IMAGE_TAG
+          aws ecr describe-repositories --repository-names $ECR_REPO --region $AWS_REGION >/dev/null 2>&1 \
+            || aws ecr create-repository --repository-name $ECR_REPO \
+                 --image-scanning-configuration scanOnPush=true --region $AWS_REGION
         '''
       }
     }
 
-    stage('Deploy to Fargate') {
+    stage('Build image') {
+      steps {
+        script {
+          env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+        }
+        sh '''
+          docker build \
+            --build-arg BUILD_NUMBER=$IMAGE_TAG \
+            --build-arg GIT_SHA=$GIT_SHA \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t $IMAGE_URI .
+        '''
+      }
+    }
+
+    stage('Push to ECR') {
+      steps {
+        sh 'docker push $IMAGE_URI'
+      }
+    }
+
+    stage('Verify image in ECR') {
       steps {
         sh '''
-          NEW_IMAGE=$REGISTRY/$ECR_REPO:$IMAGE_TAG
-
-          aws ecs describe-task-definition \
-            --task-definition $TASK_FAMILY \
-            --region $AWS_REGION \
-            --query 'taskDefinition' > taskdef.json
-
-          jq --arg IMG "$NEW_IMAGE" --arg C "$CONTAINER" '
-            .containerDefinitions |= map(if .name == $C then .image = $IMG else . end)
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                  .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)
-          ' taskdef.json > new-taskdef.json
-
-          REV=$(aws ecs register-task-definition \
-            --cli-input-json file://new-taskdef.json \
-            --region $AWS_REGION \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-
-          aws ecs update-service \
-            --cluster $CLUSTER --service $SERVICE \
-            --task-definition $REV --region $AWS_REGION
-
-          aws ecs wait services-stable \
-            --cluster $CLUSTER --service $SERVICE --region $AWS_REGION
+          aws ecr describe-images --repository-name $ECR_REPO \
+            --image-ids imageTag=$IMAGE_TAG --region $AWS_REGION \
+            --query 'imageDetails[0].{tag:imageTags[0],pushedAt:imagePushedAt,sizeMB:imageSizeInBytes}' \
+            --output table
         '''
       }
     }
@@ -82,6 +70,12 @@ pipeline {
 
   post {
     always  { sh 'docker image prune -f || true' }
-    success { echo "Deployed $REGISTRY/$ECR_REPO:$IMAGE_TAG to $SERVICE" }
+    success {
+      echo "=============================================================="
+      echo " Image pushed. Paste this into your ECS task definition JSON:"
+      echo "   \"image\": \"${IMAGE_URI}\""
+      echo "=============================================================="
+    }
+    failure { echo "Build failed — check the ECR login and IAM permissions on the Jenkins instance role." }
   }
 }
