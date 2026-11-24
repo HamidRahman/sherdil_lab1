@@ -4,13 +4,10 @@ pipeline {
   environment {
     AWS_REGION  = 'us-east-1'
     ACCOUNT_ID  = '678878256416'
-    ECR_REPO    = 'hamidr/ecr_repo1'
+    ECR_REPO    = 'hamidr/repo_1'
     REGISTRY    = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
     IMAGE_TAG   = "${env.BUILD_NUMBER}"
-    CLUSTER     = 'hamidR-task30-cluster'
-    SERVICE     = 'hamidR-scenario30-task-service-q333ed2a'
-    TASK_FAMILY = 'hamidR-scenario30-task'
-    CONTAINER   = 'app'
+    
   }
 
   stages {
