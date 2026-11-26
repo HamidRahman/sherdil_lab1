@@ -11,7 +11,7 @@ permissions:
 
 env:
   AWS_REGION:          us-east-1
-  ECR_REPOSITORY:      scenario32-app
+  ECR_REPOSITORY:      hamidr/scenario32-app
   ECS_CLUSTER:         scenario32-cluster
   ECS_SERVICE:         scenario32-service
   ECS_TASK_DEFINITION: .aws/task-definition.json
