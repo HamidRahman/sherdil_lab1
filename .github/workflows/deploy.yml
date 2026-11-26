@@ -11,7 +11,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: scenario32-app      # hamidr/scenario32-app  (incase this fails)
+  ECR_REPOSITORY: hamidr/scenario32-app      # hamidr/scenario32-app  (incase this fails)
 
 jobs:
   build:
